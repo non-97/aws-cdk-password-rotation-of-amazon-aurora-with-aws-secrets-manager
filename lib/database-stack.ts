@@ -19,8 +19,10 @@ export class DatabaseStack extends Stack {
   constructor(scope: Construct, id: string, props: DatabaseStackPops) {
     super(scope, id, props);
 
+    // Characters to exclude in passwords set for DB
     const EXCLUDE_CHARACTERS = ":@/\" '";
 
+    // Security Group for DB Client
     const dbClientSg = new ec2.SecurityGroup(this, "DbClientSg", {
       vpc: props.vpc,
       securityGroupName: "prd-db-client-sg",
@@ -28,6 +30,7 @@ export class DatabaseStack extends Stack {
       allowAllOutbound: true,
     });
 
+    // Security Group for Lambda Functions that rotate secret
     const rotateSecretsLambdaFunctionSg = new ec2.SecurityGroup(
       this,
       "RotateSecretsLambdaFunctionSg",
@@ -39,6 +42,8 @@ export class DatabaseStack extends Stack {
       }
     );
 
+    // Security Group for DB
+    // Allow access from DB clients and Lambda Functions that rotate the secret
     const dbSg = new ec2.SecurityGroup(this, "DbSg", {
       vpc: props.vpc,
       securityGroupName: "prd-db-sg",
@@ -48,7 +53,7 @@ export class DatabaseStack extends Stack {
     dbSg.addIngressRule(
       ec2.Peer.securityGroupId(rotateSecretsLambdaFunctionSg.securityGroupId),
       ec2.Port.tcp(5432),
-      "Allow DB access from Lambda functions that rotate Secrets"
+      "Allow DB access from Lambda Functions that rotate Secrets"
     );
     dbSg.addIngressRule(
       ec2.Peer.securityGroupId(dbClientSg.securityGroupId),
@@ -56,6 +61,7 @@ export class DatabaseStack extends Stack {
       "Allow DB access from DB Client"
     );
 
+    // DB Admin User Secret
     const dbAdminSecret = new secretsmanager.Secret(this, "DbAdminSecret", {
       secretName: "prd-db-cluster/AdminLoginInfo",
       generateSecretString: {
@@ -67,6 +73,7 @@ export class DatabaseStack extends Stack {
       },
     });
 
+    // DB Cluster Parameter Group
     const dbClusterParameterGroup = new rds.ParameterGroup(
       this,
       "DbClusterParameterGroup",
@@ -84,6 +91,7 @@ export class DatabaseStack extends Stack {
       }
     );
 
+    // DB Parameter Group
     const dbParameterGroup = new rds.ParameterGroup(this, "DbParameterGroup", {
       engine: rds.DatabaseClusterEngine.auroraPostgres({
         version: rds.AuroraPostgresEngineVersion.VER_13_4,
@@ -91,6 +99,7 @@ export class DatabaseStack extends Stack {
       description: "aurora-postgresql13",
     });
 
+    // Subnet Group
     const subnetGroup = new rds.SubnetGroup(this, "SubnetGroup", {
       description: "description",
       vpc: props.vpc,
@@ -101,6 +110,7 @@ export class DatabaseStack extends Stack {
       }),
     });
 
+    // DB Cluster
     const dbCluster = new rds.DatabaseCluster(this, "DbCluster", {
       engine: rds.DatabaseClusterEngine.auroraPostgres({
         version: rds.AuroraPostgresEngineVersion.VER_13_4,
@@ -141,6 +151,7 @@ export class DatabaseStack extends Stack {
       subnetGroup,
     });
 
+    // Rotate DB Admin user secret
     new secretsmanager.SecretRotation(this, "DbAdminSecretRotation", {
       application:
         secretsmanager.SecretRotationApplication.POSTGRES_ROTATION_SINGLE_USER,
@@ -184,6 +195,7 @@ export class DatabaseStack extends Stack {
     });
     userDataAmazonLinux2.addCommands(userDataParameter);
 
+    // DB Client
     new ec2.Instance(this, "DbClient", {
       instanceType: new ec2.InstanceType("t3.micro"),
       machineImage: ec2.MachineImage.latestAmazonLinux({
