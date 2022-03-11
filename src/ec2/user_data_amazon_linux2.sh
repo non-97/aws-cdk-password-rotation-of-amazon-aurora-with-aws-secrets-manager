@@ -6,6 +6,7 @@ exec > >(tee /var/log/user-data.log | logger -t user-data -s 2>/dev/console) 2>&
 
 # Install the necessary packages
 yum update -y
+yum install jq -y
 amazon-linux-extras install -y epel
 
 # PGDG repository activation
